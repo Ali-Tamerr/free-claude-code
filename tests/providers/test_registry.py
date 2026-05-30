@@ -30,6 +30,7 @@ from providers.registry import (
 )
 from providers.wafer import WaferProvider
 from providers.zai import ZaiProvider
+from providers.vertex_ai_agent import VertexAIAgentProvider
 
 
 def _make_settings(**overrides):
@@ -67,6 +68,11 @@ def _make_settings(**overrides):
     mock.groq_proxy = ""
     mock.cerebras_api_key = ""
     mock.cerebras_proxy = ""
+    mock.vertex_ai_api_key = "test_vertex_key"
+    mock.vertex_ai_project_id = "test-project"
+    mock.vertex_ai_location = "us-central1"
+    mock.vertex_ai_base_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/test-project/locations/us-central1/endpoints/openapi"
+    mock.vertex_ai_proxy = ""
     mock.provider_rate_limit = 40
     mock.provider_rate_window = 60
     mock.provider_max_concurrency = 5
@@ -188,6 +194,7 @@ def test_create_provider_instantiates_each_builtin():
         "gemini": GeminiProvider,
         "groq": GroqProvider,
         "cerebras": CerebrasProvider,
+        "vertex_ai_agent": VertexAIAgentProvider,
     }
 
     with (

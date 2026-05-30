@@ -146,6 +146,16 @@ def _create_vertex_ai(config: ProviderConfig, settings: Settings) -> BaseProvide
     )
 
 
+def _create_vertex_ai_agent(config: ProviderConfig, settings: Settings) -> BaseProvider:
+    from providers.vertex_ai_agent import VertexAIAgentProvider
+
+    return VertexAIAgentProvider(
+        config,
+        project_id=settings.vertex_ai_project_id,
+        location=settings.vertex_ai_location,
+    )
+
+
 PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "nvidia_nim": _create_nvidia_nim,
     "open_router": _create_open_router,
@@ -165,6 +175,7 @@ PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "llamacpp": _create_llamacpp,
     "ollama": _create_ollama,
     "vertex_ai": _create_vertex_ai,
+    "vertex_ai_agent": _create_vertex_ai_agent,
 }
 
 if set(PROVIDER_DESCRIPTORS) != set(SUPPORTED_PROVIDER_IDS) or set(

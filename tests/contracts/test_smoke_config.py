@@ -39,6 +39,10 @@ def _settings(**overrides):
         "lm_studio_base_url": "",
         "llamacpp_base_url": "",
         "ollama_base_url": "http://localhost:11434",
+        "vertex_ai_api_key": "",
+        "vertex_ai_project_id": "",
+        "vertex_ai_location": "",
+        "vertex_ai_base_url": "",
     }
     values.update(overrides)
     return SimpleNamespace(**values)

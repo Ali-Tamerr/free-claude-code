@@ -257,6 +257,17 @@ PROVIDER_CATALOG: dict[str, ProviderDescriptor] = {
         proxy_attr="vertex_ai_proxy",
         capabilities=("chat", "streaming", "tools", "thinking", "rate_limit"),
     ),
+    "vertex_ai_agent": ProviderDescriptor(
+        provider_id="vertex_ai_agent",
+        transport_type="openai_chat",
+        credential_env="VERTEX_AI_API_KEY",
+        credential_url="https://console.cloud.google.com/agent-platform/studio/settings/api-keys",
+        credential_attr="vertex_ai_api_key",
+        default_base_url=None,
+        base_url_attr="vertex_ai_base_url",
+        proxy_attr="vertex_ai_proxy",
+        capabilities=("chat", "streaming", "tools", "thinking", "rate_limit"),
+    ),
 }
 
 # Key order:

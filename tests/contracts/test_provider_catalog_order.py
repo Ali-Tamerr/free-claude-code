@@ -23,6 +23,7 @@ _EXPECTED_PROVIDER_ORDER: tuple[str, ...] = (
     "llamacpp",
     "ollama",
     "vertex_ai",
+    "vertex_ai_agent",
 )
 
 

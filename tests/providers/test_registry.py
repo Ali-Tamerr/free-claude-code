@@ -28,9 +28,9 @@ from providers.registry import (
     build_provider_config,
     create_provider,
 )
+from providers.vertex_ai_agent import VertexAIAgentProvider
 from providers.wafer import WaferProvider
 from providers.zai import ZaiProvider
-from providers.vertex_ai_agent import VertexAIAgentProvider
 
 
 def _make_settings(**overrides):

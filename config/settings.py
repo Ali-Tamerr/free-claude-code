@@ -150,12 +150,8 @@ class Settings(BaseSettings):
     vertex_ai_project_id: str = Field(
         default="", validation_alias="VERTEX_AI_PROJECT_ID"
     )
-    vertex_ai_location: str = Field(
-        default="", validation_alias="VERTEX_AI_LOCATION"
-    )
-    vertex_ai_base_url: str = Field(
-        default="", validation_alias="VERTEX_AI_BASE_URL"
-    )
+    vertex_ai_location: str = Field(default="", validation_alias="VERTEX_AI_LOCATION")
+    vertex_ai_base_url: str = Field(default="", validation_alias="VERTEX_AI_BASE_URL")
 
     # ==================== Messaging Platform Selection ====================
     # Valid: "telegram" | "discord" | "none"

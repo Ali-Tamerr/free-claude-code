@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -12,11 +13,14 @@ from core.anthropic import ContentType, HeuristicToolParser, SSEBuilder, ThinkTa
 from core.anthropic.sse import map_stop_reason
 from core.trace import provider_chat_body_snapshot, trace_event
 from providers.base import BaseProvider, ProviderConfig
-from providers.error_mapping import map_error, user_visible_message_for_mapped_provider_error
+from providers.error_mapping import (
+    map_error,
+    user_visible_message_for_mapped_provider_error,
+)
 from providers.exceptions import AuthenticationError
 from providers.model_listing import ProviderModelInfo, model_infos_from_ids
-from providers.rate_limit import GlobalRateLimiter
 from providers.openai_compat import _iter_heuristic_tool_use_sse
+from providers.rate_limit import GlobalRateLimiter
 from providers.vertex_ai.client import build_vertex_base_url
 from providers.vertex_ai.request import build_request_body
 

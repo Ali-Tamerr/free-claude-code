@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import openai
+
 from providers.base import ProviderConfig
 from providers.openai_compat import OpenAIChatTransport
 
@@ -60,3 +62,14 @@ class VertexAIProvider(OpenAIChatTransport):
             request,
             thinking_enabled=self._is_thinking_enabled(request, thinking_enabled),
         )
+
+    async def list_model_ids(self) -> frozenset[str]:
+        """Return model ids or empty set when Vertex AI lacks /models support."""
+        try:
+            return await super().list_model_ids()
+        except openai.NotFoundError:
+            return frozenset()
+        except openai.APIError as exc:
+            if getattr(exc, "status_code", None) == 404:
+                return frozenset()
+            raise

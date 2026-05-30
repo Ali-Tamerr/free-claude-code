@@ -246,6 +246,16 @@ PROVIDER_CATALOG: dict[str, ProviderDescriptor] = {
             "local",
         ),
     ),
+    "vertex_ai": ProviderDescriptor(
+        provider_id="vertex_ai",
+        transport_type="openai_chat",
+        credential_env="VERTEX_AI_API_KEY",
+        credential_url="https://cloud.google.com/vertex-ai",
+        credential_attr="vertex_ai_api_key",
+        default_base_url=None,
+        proxy_attr="vertex_ai_proxy",
+        capabilities=("chat", "streaming", "tools", "thinking", "rate_limit"),
+    ),
 }
 
 # Key order:

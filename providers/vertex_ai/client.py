@@ -24,6 +24,33 @@ _VERTEX_BASE_URL_TEMPLATE = (
     "projects/{project_id}/locations/{location}/endpoints/openapi"
 )
 
+_VERTEX_MODEL_FALLBACK: frozenset[str] = frozenset(
+    (
+        # Gemini models (latest stable)
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-live-2.5-flash-native-audio",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-image",
+        "gemini-2.0-flash-001",
+        "gemini-2.0-flash-lite-001",
+        # Veo models
+        "veo-3.1-generate-001",
+        "veo-3.1-fast-generate-001",
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-2.0-generate-001",
+        # Embeddings models
+        "gemini-embedding-001",
+        "text-embedding-005",
+        "text-embedding-004",
+        "text-multilingual-embedding-002",
+        "multimodalembedding@001",
+    )
+)
+
 
 def build_vertex_base_url(project_id: str, location: str) -> str:
     """Build the Vertex AI OpenAI-compat base URL from project + location."""
@@ -69,12 +96,12 @@ class VertexAIProvider(OpenAIChatTransport):
         )
 
     async def list_model_ids(self) -> frozenset[str]:
-        """Return model ids or empty set when Vertex AI lacks /models support."""
+        """Return model ids or fallback list when Vertex AI lacks /models support."""
         try:
             return await super().list_model_ids()
         except openai.NotFoundError:
-            return frozenset()
+            return _VERTEX_MODEL_FALLBACK
         except openai.APIError as exc:
             if getattr(exc, "status_code", None) == 404:
-                return frozenset()
+                return _VERTEX_MODEL_FALLBACK
             raise

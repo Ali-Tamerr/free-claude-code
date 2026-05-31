@@ -100,7 +100,7 @@ def _extract_system(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str,
 def _openai_messages_to_contents(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    contents: list[dict[str, Any]] = []
+    raw_contents: list[dict[str, Any]] = []
     tool_id_map: dict[str, str] = {}
 
     for msg in messages:
@@ -109,7 +109,7 @@ def _openai_messages_to_contents(
             tool_call_id = str(msg.get("tool_call_id") or "")
             tool_name = tool_id_map.get(tool_call_id, "tool")
             response = _parse_json_or_text(msg.get("content", ""))
-            contents.append(
+            raw_contents.append(
                 {
                     "role": "user",
                     "parts": [
@@ -155,19 +155,47 @@ def _openai_messages_to_contents(
         if not parts:
             parts = [{"text": ""}]
 
-        contents.append({"role": _map_role(role), "parts": parts})
+        raw_contents.append({"role": _map_role(role), "parts": parts})
+
+    contents: list[dict[str, Any]] = []
+    for item in raw_contents:
+        if not contents:
+            contents.append(item)
+            continue
+
+        last_item = contents[-1]
+        if last_item["role"] == item["role"]:
+            last_has_fn_res = any("functionResponse" in p for p in last_item["parts"])
+            curr_has_fn_res = any("functionResponse" in p for p in item["parts"])
+            if last_has_fn_res == curr_has_fn_res:
+                last_item["parts"].extend(item["parts"])
+            else:
+                contents.append(item)
+        else:
+            contents.append(item)
 
     return contents
 
 
+def _clean_text(text: str) -> str:
+    if "[Tool use interrupted]" in text:
+        text = text.replace("[Tool use interrupted]", "")
+    if "(no content)" in text:
+        text = text.replace("(no content)", "")
+    return text.strip()
+
+
 def _content_to_parts(content: Any) -> list[dict[str, Any]]:
     if isinstance(content, str):
-        return [{"text": content}]
+        cleaned = _clean_text(content)
+        return [{"text": cleaned}] if cleaned else []
     if isinstance(content, list):
         parts: list[dict[str, Any]] = []
         for item in content:
             if isinstance(item, dict) and item.get("type") == "text":
-                parts.append({"text": str(item.get("text", ""))})
+                cleaned = _clean_text(str(item.get("text", "")))
+                if cleaned:
+                    parts.append({"text": cleaned})
             else:
                 raise InvalidRequestError(
                     "Vertex AI Generative Language API only supports text content."
@@ -175,7 +203,8 @@ def _content_to_parts(content: Any) -> list[dict[str, Any]]:
         return parts
     if content is None:
         return []
-    return [{"text": str(content)}]
+    cleaned = _clean_text(str(content))
+    return [{"text": cleaned}] if cleaned else []
 
 
 def _sanitize_schema(schema: Any) -> Any:
@@ -299,29 +328,49 @@ def _get_cache_file_path() -> Path:
     return cache_dir / "vertex_ai_signatures.json"
 
 
-def _load_cache() -> dict[str, str]:
+_IN_MEMORY_CACHE: dict[str, str] | None = None
+
+
+def _get_cache() -> dict[str, str]:
+    global _IN_MEMORY_CACHE
+    if _IN_MEMORY_CACHE is not None:
+        return _IN_MEMORY_CACHE
+
     path = _get_cache_file_path()
     if not path.exists():
-        return {}
+        _IN_MEMORY_CACHE = {}
+        return _IN_MEMORY_CACHE
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
-                return data
+                _IN_MEMORY_CACHE = data
+                return _IN_MEMORY_CACHE
     except Exception as e:
         logger.warning("Failed to load vertex thought signature cache: {}", e)
-    return {}
+    _IN_MEMORY_CACHE = {}
+    return _IN_MEMORY_CACHE
 
 
-def _save_cache(cache: dict[str, str]) -> None:
+def _save_cache_to_disk(cache_copy: dict[str, str]) -> None:
     path = _get_cache_file_path()
     try:
         temp_path = path.with_suffix(".tmp")
         with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=2)
+            json.dump(cache_copy, f, ensure_ascii=False, indent=2)
         temp_path.replace(path)
     except Exception as e:
         logger.warning("Failed to save vertex thought signature cache: {}", e)
+
+
+def _save_cache_async(cache_copy: dict[str, str]) -> None:
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, _save_cache_to_disk, cache_copy)
+    except RuntimeError:
+        _save_cache_to_disk(cache_copy)
 
 
 def _make_cache_key(name: str, args: dict[str, Any]) -> str:
@@ -334,15 +383,15 @@ def _make_cache_key(name: str, args: dict[str, Any]) -> str:
 
 def save_thought_signature(name: str, args: dict[str, Any], signature: str) -> None:
     key = _make_cache_key(name, args)
-    cache = _load_cache()
+    cache = _get_cache()
     if key not in cache and len(cache) >= 1000:
         first_key = next(iter(cache))
         cache.pop(first_key, None)
     cache[key] = signature
-    _save_cache(cache)
+    _save_cache_async(cache.copy())
 
 
 def lookup_thought_signature(name: str, args: dict[str, Any]) -> str | None:
     key = _make_cache_key(name, args)
-    cache = _load_cache()
+    cache = _get_cache()
     return cache.get(key)

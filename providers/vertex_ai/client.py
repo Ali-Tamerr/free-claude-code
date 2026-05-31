@@ -282,9 +282,11 @@ class VertexAIProvider(BaseProvider):
                 or usage_info.get("completionTokenCount")
                 or 0
             )
-        yield sse.message_delta(
-            map_stop_reason(_map_finish_reason(finish_reason)), output_tokens
-        )
+        final_stop_reason = map_stop_reason(_map_finish_reason(finish_reason))
+        if sse.blocks.tool_states and final_stop_reason == "end_turn":
+            final_stop_reason = "tool_use"
+
+        yield sse.message_delta(final_stop_reason, output_tokens)
         yield sse.message_stop()
 
 

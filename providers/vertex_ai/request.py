@@ -147,7 +147,6 @@ def _openai_messages_to_contents(
                 }
                 if sig:
                     part_dict["thoughtSignature"] = sig
-                    part_dict["thought_signature"] = sig
 
                 parts.append(part_dict)
                 if tc.get("id"):

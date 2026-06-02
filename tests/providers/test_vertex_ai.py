@@ -105,6 +105,7 @@ def test_openai_messages_to_contents_alternating_and_merging():
 
 def test_openai_messages_to_contents_strips_interrupted_and_no_content():
     # Test stripping of "[Tool use interrupted]" and "(no content)" from strings
+    # Empty turns should be filtered out entirely, causing the remaining turns to be merged if they have the same role
     messages = [
         {"role": "user", "content": "[Tool use interrupted] drain context"},
         {"role": "assistant", "content": "(no content)"},
@@ -118,20 +119,15 @@ def test_openai_messages_to_contents_strips_interrupted_and_no_content():
         },
     ]
     contents = _openai_messages_to_contents(messages)
-    assert len(contents) == 4
+    # The second message is assistant "(no content)" which becomes empty and is filtered.
+    # The first and third messages are user and are consecutive after filtering, so they get merged.
+    # The fourth message is assistant "world" which becomes model turn.
+    assert len(contents) == 2
 
-    # 1. "[Tool use interrupted] drain context" -> "drain context"
+    # 1. Merge of 1 and 3: "drain context" and "hello"
     assert contents[0]["role"] == "user"
-    assert contents[0]["parts"] == [{"text": "drain context"}]
+    assert contents[0]["parts"] == [{"text": "drain context"}, {"text": "hello"}]
 
-    # 2. "(no content)" -> "" -> will be cleaned to [{"text": ""}]
+    # 2. Fourth message: "world"
     assert contents[1]["role"] == "model"
-    assert contents[1]["parts"] == [{"text": ""}]
-
-    # 3. List with text: "hello [Tool use interrupted]" -> "hello"
-    assert contents[2]["role"] == "user"
-    assert contents[2]["parts"] == [{"text": "hello"}]
-
-    # 4. List with text: "world (no content)" -> "world"
-    assert contents[3]["role"] == "model"
-    assert contents[3]["parts"] == [{"text": "world"}]
+    assert contents[1]["parts"] == [{"text": "world"}]

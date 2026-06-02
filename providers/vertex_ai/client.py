@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -139,6 +140,9 @@ class VertexAIProvider(BaseProvider):
                     data = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
+                from loguru import logger
+
+                logger.debug("VERTEX_AI_RAW_STREAM_DATA: {}", data)
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, dict):
@@ -344,7 +348,7 @@ def _emit_function_call(sse: SSEBuilder, call: dict[str, Any]) -> list[str]:
     name = call.get("name") or "tool"
     args = call.get("args") or {}
     tool_index = len(sse.blocks.tool_states)
-    tool_id = f"toolu_vertex_{tool_index}"
+    tool_id = f"toolu_vertex_{uuid.uuid4().hex[:8]}"
     events: list[str] = []
     events.append(sse.start_tool_block(tool_index, tool_id, name))
     events.append(sse.emit_tool_delta(tool_index, json.dumps(args)))

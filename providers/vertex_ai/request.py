@@ -157,8 +157,13 @@ def _openai_messages_to_contents(
 
         raw_contents.append({"role": _map_role(role), "parts": parts})
 
+    # Filter out empty turns to prevent bloated context and infinite loops from interrupted tools
+    filtered_contents = [item for item in raw_contents if not _is_empty_turn(item)]
+    if not filtered_contents:
+        filtered_contents = raw_contents
+
     contents: list[dict[str, Any]] = []
-    for item in raw_contents:
+    for item in filtered_contents:
         if not contents:
             contents.append(item)
             continue
@@ -175,6 +180,18 @@ def _openai_messages_to_contents(
             contents.append(item)
 
     return contents
+
+
+def _is_empty_turn(item: dict[str, Any]) -> bool:
+    parts = item.get("parts", [])
+    if not parts:
+        return True
+    for p in parts:
+        if "functionCall" in p or "functionResponse" in p:
+            return False
+        if p.get("text", "").strip():
+            return False
+    return True
 
 
 def _clean_text(text: str) -> str:

@@ -216,3 +216,70 @@ async def test_vertex_ai_provider_stream_response_error_propagation() -> None:
     assert "Upstream provider VERTEX_AI returned HTTP 404." in combined_events
 
     await provider.cleanup()
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_provider_request_parameters_and_headers() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+
+    # Mock send to check the built request
+    mock_send = AsyncMock()
+    mock_send.return_value = httpx.Response(200, json={})
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    # Patch build_request to inspect it or patch send to inspect it
+    with patch.object(provider._client, "send", mock_send):
+        try:
+            async for _ in provider.stream_response(DummyRequest()):
+                pass
+        except Exception:
+            pass
+
+    # Inspect the request that was built and sent
+    assert mock_send.called
+    called_request = mock_send.call_args[0][0]
+
+    # Check url query parameters: should contain alt=sse but NOT contain key
+    query_params = dict(called_request.url.params)
+    assert query_params.get("alt") == "sse"
+    assert "key" not in query_params
+
+    # Check headers: should contain x-goog-api-key
+    assert called_request.headers.get("x-goog-api-key") == "test_api_key_12345"
+
+    await provider.cleanup()

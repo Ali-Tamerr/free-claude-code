@@ -125,7 +125,7 @@ class VertexAIProvider(BaseProvider):
             "POST",
             f"/publishers/{publisher}/models/{model}:streamGenerateContent",
             json=body,
-            params={"key": self._api_key, "alt": "sse"},
+            params={"alt": "sse"},
             headers={
                 "Content-Type": "application/json",
                 "x-goog-api-key": self._api_key,

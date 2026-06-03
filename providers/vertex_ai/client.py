@@ -14,6 +14,8 @@ from core.anthropic.sse import map_stop_reason
 from core.trace import trace_event
 from providers.base import BaseProvider, ProviderConfig
 from providers.error_mapping import (
+    attach_provider_error_body,
+    extract_provider_error_detail,
     map_error,
     user_visible_message_for_mapped_provider_error,
 )
@@ -62,9 +64,14 @@ class VertexAIProvider(BaseProvider):
     ):
         super().__init__(config)
         base_url = (config.base_url or "").strip()
+        explicit_base_url = bool(config.base_url and config.base_url.strip())
         if not base_url:
             base_url = _build_generativelanguage_base_url(location)
-        if not base_url or (base_url == _DEFAULT_BASE_URL and not location.strip()):
+        if not base_url or (
+            base_url == _DEFAULT_BASE_URL
+            and not location.strip()
+            and not explicit_base_url
+        ):
             raise AuthenticationError(
                 "VERTEX_AI_BASE_URL or VERTEX_AI_LOCATION must be set. "
                 "Provide an explicit endpoint URL or a Google Cloud region (e.g. us-central1)."
@@ -132,7 +139,12 @@ class VertexAIProvider(BaseProvider):
         try:
             if response.status_code >= 400:
                 await _log_response_error(response)
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as error:
+                    body_bytes = getattr(response, "content", b"")
+                    attach_provider_error_body(error, body_bytes, truncated=False)
+                    raise error
             async for line in response.aiter_lines():
                 if not line:
                     continue
@@ -262,6 +274,8 @@ class VertexAIProvider(BaseProvider):
                     mapped_e,
                     provider_name=self._provider_name,
                     read_timeout_s=self._config.http_read_timeout,
+                    detail=extract_provider_error_detail(e),
+                    request_id=request_id,
                 )
                 for event in sse.close_all_blocks():
                     yield event

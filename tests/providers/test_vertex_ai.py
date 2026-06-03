@@ -1,5 +1,7 @@
 """Tests for the Vertex AI provider and its request/response handling."""
 
+import pytest
+
 from providers.vertex_ai.request import _openai_messages_to_contents
 
 
@@ -154,3 +156,63 @@ def test_vertex_ai_provider_missing_location_and_base_url():
     with pytest.raises(AuthenticationError) as exc_info:
         VertexAIProvider(config, location="")
     assert "VERTEX_AI_BASE_URL or VERTEX_AI_LOCATION must be set" in str(exc_info.value)
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_provider_stream_response_error_propagation() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_key",
+        base_url="https://aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+
+    # Mock send to return a 404 response
+    mock_send = AsyncMock()
+    mock_response = httpx.Response(
+        status_code=404,
+        request=httpx.Request("POST", "http://test"),
+        content=b'{"error": {"message": "Model gemini-3.5-flash not found", "status": "NOT_FOUND"}}',
+    )
+    mock_send.return_value = mock_response
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    with patch.object(provider._client, "send", mock_send):
+        events = [event async for event in provider.stream_response(DummyRequest())]
+
+    # Verify that the mapped error message containing model-not-found detail was yielded
+    combined_events = "".join(events)
+    assert "Model gemini-3.5-flash not found" in combined_events
+    assert "Upstream provider VERTEX_AI returned HTTP 404." in combined_events
+
+    await provider.cleanup()

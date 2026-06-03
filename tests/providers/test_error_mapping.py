@@ -291,7 +291,7 @@ def test_attached_provider_error_body_is_capped_for_display():
 def test_streaming_transports_pass_scoped_rate_limiter_to_map_error():
     """Guardrail: streaming adapters must scope reactive 429 handling per provider."""
     root = Path(__file__).resolve().parents[2]
-    for name in ("anthropic_messages.py", "openai_compat.py"):
+    for name in ("anthropic_messages.py", "openai_compat.py", "vertex_ai/client.py"):
         text = (root / "providers" / name).read_text(encoding="utf-8")
         assert "map_error(" in text, name
         assert "rate_limiter=self._global_rate_limiter" in text, name

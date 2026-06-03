@@ -342,6 +342,13 @@ class Settings(BaseSettings):
             return None
         return v
 
+    @field_validator("vertex_ai_location", mode="before")
+    @classmethod
+    def parse_vertex_location(cls, v: Any) -> str:
+        if v == "" or v is None:
+            return "us-central1"
+        return str(v)
+
     @property
     def claude_workspace(self) -> str:
         """Return the fixed Claude data workspace path."""

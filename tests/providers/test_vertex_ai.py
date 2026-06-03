@@ -131,3 +131,26 @@ def test_openai_messages_to_contents_strips_interrupted_and_no_content():
     # 2. Fourth message: "world"
     assert contents[1]["role"] == "model"
     assert contents[1]["parts"] == [{"text": "world"}]
+
+
+def test_vertex_ai_provider_missing_location_and_base_url():
+    import pytest
+
+    from providers.base import ProviderConfig
+    from providers.exceptions import AuthenticationError
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_key",
+        base_url="",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    with pytest.raises(AuthenticationError) as exc_info:
+        VertexAIProvider(config, location="")
+    assert "VERTEX_AI_BASE_URL or VERTEX_AI_LOCATION must be set" in str(exc_info.value)

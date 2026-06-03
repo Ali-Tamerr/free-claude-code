@@ -64,6 +64,11 @@ class VertexAIProvider(BaseProvider):
         base_url = (config.base_url or "").strip()
         if not base_url:
             base_url = _build_generativelanguage_base_url(location)
+        if not base_url or (base_url == _DEFAULT_BASE_URL and not location.strip()):
+            raise AuthenticationError(
+                "VERTEX_AI_BASE_URL or VERTEX_AI_LOCATION must be set. "
+                "Provide an explicit endpoint URL or a Google Cloud region (e.g. us-central1)."
+            )
         if not config.api_key.strip():
             raise AuthenticationError(
                 "VERTEX_AI_API_KEY is required for Generative Language API requests."

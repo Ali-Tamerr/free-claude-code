@@ -688,13 +688,18 @@ def test_save_thought_signature_concurrent(tmp_path):
             futures = [executor.submit(save_one, i) for i in range(50)]
             concurrent.futures.wait(futures)
 
+        for fut in futures:
+            fut.result()
+
         assert temp_cache_file.exists()
         import json
 
         with open(temp_cache_file, encoding="utf-8") as f:
             data = json.load(f)
             assert isinstance(data, dict)
-            assert len(data) > 0
+            for i in range(50):
+                expected_key = f'tool_{i}:{{"arg": {i}}}'
+                assert data.get(expected_key) == f"sig_{i}"
 
 
 @pytest.mark.anyio

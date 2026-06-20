@@ -104,6 +104,7 @@ def test_openai_messages_to_contents_alternating_and_merging():
     assert contents[1]["role"] == "user"
     assert "functionResponse" in contents[1]["parts"][0]
 
+
 def test_openai_messages_to_contents_strips_interrupted_and_no_content():
     # Test stripping of "[Tool use interrupted]" and "(no content)" from strings
     # Empty turns should be filtered out entirely, causing the remaining turns to be merged if they have the same role
@@ -280,5 +281,71 @@ async def test_vertex_ai_provider_request_parameters_and_headers() -> None:
 
     # Check headers: should contain x-goog-api-key
     assert called_request.headers.get("x-goog-api-key") == "test_api_key_12345"
+
+    await provider.cleanup()
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_provider_project_id_path() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(
+        config, project_id="test_project", location="us-central1"
+    )
+
+    # Mock send to check the built request
+    mock_send = AsyncMock()
+    mock_send.return_value = httpx.Response(200, json={})
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    with patch.object(provider._client, "send", mock_send):
+        try:
+            async for _ in provider.stream_response(DummyRequest()):
+                pass
+        except Exception:
+            pass
+
+    assert mock_send.called
+    called_request = mock_send.call_args[0][0]
+
+    # Check url path: should contain project_id and location segment
+    # Note that base_url has /v1 at the end. Since the request path does not begin with /v1, we need to verify how it resolves.
+    assert (
+        called_request.url.path
+        == "/v1/projects/test_project/locations/us-central1/publishers/google/models/gemini-3.5-flash:streamGenerateContent"
+    )
 
     await provider.cleanup()

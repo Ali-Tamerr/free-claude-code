@@ -141,6 +141,7 @@ def _create_vertex_ai(config: ProviderConfig, settings: Settings) -> BaseProvide
 
     return VertexAIProvider(
         config,
+        project_id=settings.vertex_ai_project_id,
         location=settings.vertex_ai_location,
     )
 

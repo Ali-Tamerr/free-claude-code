@@ -60,16 +60,19 @@ class VertexAIProvider(BaseProvider):
         self,
         config: ProviderConfig,
         *,
+        project_id: str = "",
         location: str = "",
     ):
         super().__init__(config)
+        self._project_id = project_id.strip()
+        self._location = location.strip()
         base_url = (config.base_url or "").strip()
         explicit_base_url = bool(config.base_url and config.base_url.strip())
         if not base_url:
-            base_url = _build_generativelanguage_base_url(location)
+            base_url = _build_generativelanguage_base_url(self._location)
         if not base_url or (
             base_url == _DEFAULT_BASE_URL
-            and not location.strip()
+            and not self._location
             and not explicit_base_url
         ):
             raise AuthenticationError(
@@ -121,9 +124,14 @@ class VertexAIProvider(BaseProvider):
         self, body: dict[str, Any], model_ref: str
     ) -> httpx.Response:
         publisher, model = _split_publisher_model(model_ref)
+        if self._project_id:
+            location = self._location or "us-central1"
+            path = f"/projects/{self._project_id}/locations/{location}/publishers/{publisher}/models/{model}:streamGenerateContent"
+        else:
+            path = f"/publishers/{publisher}/models/{model}:streamGenerateContent"
         request = self._client.build_request(
             "POST",
-            f"/publishers/{publisher}/models/{model}:streamGenerateContent",
+            path,
             json=body,
             params={"alt": "sse"},
             headers={

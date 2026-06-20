@@ -263,10 +263,9 @@ class SmokeConfig:
                 return False
             if self.settings.vertex_ai_base_url.strip():
                 return True
-            return bool(
-                self.settings.vertex_ai_project_id.strip()
-                and self.settings.vertex_ai_location.strip()
-            )
+            if not self.settings.vertex_ai_project_id.strip():
+                return False
+            return bool(self.settings.vertex_ai_location.strip())
         return False
 
 

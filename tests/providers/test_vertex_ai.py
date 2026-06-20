@@ -667,3 +667,31 @@ def test_build_request_body_system_instruction():
     assert body_with_think["generationConfig"]["thinkingConfig"] == {
         "thinkingBudget": 2048
     }
+
+
+def test_save_thought_signature_concurrent(tmp_path):
+    import concurrent.futures
+    from unittest.mock import patch
+
+    from providers.vertex_ai.request import save_thought_signature
+
+    temp_cache_file = tmp_path / "vertex_ai_signatures.json"
+
+    with patch(
+        "providers.vertex_ai.request._get_cache_file_path", return_value=temp_cache_file
+    ):
+
+        def save_one(i):
+            save_thought_signature(f"tool_{i}", {"arg": i}, f"sig_{i}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(save_one, i) for i in range(50)]
+            concurrent.futures.wait(futures)
+
+        assert temp_cache_file.exists()
+        import json
+
+        with open(temp_cache_file, encoding="utf-8") as f:
+            data = json.load(f)
+            assert isinstance(data, dict)
+            assert len(data) > 0

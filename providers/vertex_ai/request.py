@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -367,15 +369,42 @@ def _get_cache() -> dict[str, str]:
     return _IN_MEMORY_CACHE
 
 
+_SAVE_LOCK = threading.Lock()
+
+
 def _save_cache_to_disk(cache_copy: dict[str, str]) -> None:
     path = _get_cache_file_path()
+    temp_path = path.with_name(f"{path.name}.{uuid.uuid4()}.tmp")
     try:
-        temp_path = path.with_suffix(".tmp")
-        with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(cache_copy, f, ensure_ascii=False, indent=2)
-        temp_path.replace(path)
+        with _SAVE_LOCK:
+            disk_cache: dict[str, str] = {}
+            if path.exists():
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, dict):
+                            disk_cache = data
+                except Exception:
+                    pass
+
+            merged = {**disk_cache, **cache_copy}
+            if len(merged) > 1000:
+                excess = len(merged) - 1000
+                keys_to_remove = list(merged.keys())[:excess]
+                for k in keys_to_remove:
+                    merged.pop(k, None)
+
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(merged, f, ensure_ascii=False, indent=2)
+            temp_path.replace(path)
     except Exception as e:
         logger.warning("Failed to save vertex thought signature cache: {}", e)
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except Exception:
+            pass
 
 
 def _save_cache_async(cache_copy: dict[str, str]) -> None:

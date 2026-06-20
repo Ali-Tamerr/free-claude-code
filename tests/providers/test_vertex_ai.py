@@ -407,3 +407,91 @@ def test_vertex_ai_provider_rejects_openapi_base_url() -> None:
     with pytest.raises(AuthenticationError) as exc_info:
         VertexAIProvider(config, location="us-central1")
     assert "cannot be an OpenAI-compatible endpoint" in str(exc_info.value)
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_raw_stream_logging_gate(caplog) -> None:
+    import logging
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    # Case 1: log_raw_sse_events=False
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+        log_raw_sse_events=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+    mock_send = AsyncMock()
+    mock_send.return_value = httpx.Response(
+        200,
+        content=b'data: {"candidates": [{"content": {"parts": [{"text": "hello"}]}}]}\n\n',
+    )
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    with (
+        patch.object(provider._client, "send", mock_send),
+        caplog.at_level(logging.DEBUG),
+    ):
+        async for _ in provider.stream_response(DummyRequest()):
+            pass
+
+    # Should NOT contain VERTEX_AI_RAW_STREAM_DATA
+    assert "VERTEX_AI_RAW_STREAM_DATA" not in caplog.text
+
+    # Case 2: log_raw_sse_events=True
+    config_enabled = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+        log_raw_sse_events=True,
+    )
+    provider_enabled = VertexAIProvider(config_enabled, location="us-central1")
+
+    with (
+        patch.object(provider_enabled._client, "send", mock_send),
+        caplog.at_level(logging.DEBUG),
+    ):
+        caplog.clear()
+        async for _ in provider_enabled.stream_response(DummyRequest()):
+            pass
+
+    # Should contain VERTEX_AI_RAW_STREAM_DATA
+    assert "VERTEX_AI_RAW_STREAM_DATA" in caplog.text
+
+    await provider.cleanup()
+    await provider_enabled.cleanup()

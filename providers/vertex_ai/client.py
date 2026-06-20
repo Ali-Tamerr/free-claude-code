@@ -159,9 +159,10 @@ class VertexAIProvider(BaseProvider):
                     data = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
-                from loguru import logger
+                if self._config.log_raw_sse_events:
+                    from loguru import logger
 
-                logger.debug("VERTEX_AI_RAW_STREAM_DATA: {}", data)
+                    logger.debug("VERTEX_AI_RAW_STREAM_DATA: {}", data)
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, dict):

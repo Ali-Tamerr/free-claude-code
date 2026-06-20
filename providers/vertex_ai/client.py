@@ -67,6 +67,12 @@ class VertexAIProvider(BaseProvider):
                 "VERTEX_AI_BASE_URL or VERTEX_AI_LOCATION must be set. "
                 "Provide an explicit endpoint URL or a Google Cloud region (e.g. us-central1)."
             )
+        if "endpoints/openapi" in base_url:
+            raise AuthenticationError(
+                "VERTEX_AI_BASE_URL cannot be an OpenAI-compatible endpoint (ending in '/endpoints/openapi'). "
+                "This provider uses the native Vertex AI REST API. "
+                "Use the 'gemini' provider for OpenAI-compatible Vertex AI endpoints."
+            )
         if not config.api_key.strip():
             raise AuthenticationError(
                 "VERTEX_AI_API_KEY is required for Generative Language API requests."

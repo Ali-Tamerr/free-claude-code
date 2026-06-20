@@ -71,7 +71,7 @@ def _make_settings(**overrides):
     mock.vertex_ai_api_key = "test_vertex_key"
     mock.vertex_ai_project_id = "test-project"
     mock.vertex_ai_location = "us-central1"
-    mock.vertex_ai_base_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/test-project/locations/us-central1/endpoints/openapi"
+    mock.vertex_ai_base_url = "https://us-central1-aiplatform.googleapis.com/v1"
     mock.vertex_ai_proxy = ""
     mock.provider_rate_limit = 40
     mock.provider_rate_window = 60

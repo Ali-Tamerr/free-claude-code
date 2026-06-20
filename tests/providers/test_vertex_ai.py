@@ -386,3 +386,24 @@ async def test_vertex_ai_provider_list_models() -> None:
     assert info_ids == model_ids
 
     await provider.cleanup()
+
+
+def test_vertex_ai_provider_rejects_openapi_base_url() -> None:
+    from providers.base import ProviderConfig
+    from providers.exceptions import AuthenticationError
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1beta1/projects/test-project/locations/us-central1/endpoints/openapi",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    with pytest.raises(AuthenticationError) as exc_info:
+        VertexAIProvider(config, location="us-central1")
+    assert "cannot be an OpenAI-compatible endpoint" in str(exc_info.value)

@@ -123,15 +123,18 @@ class VertexAIProvider(BaseProvider):
             path = f"projects/{self._project_id}/locations/{location}/publishers/{publisher}/models/{model}:streamGenerateContent"
         else:
             path = f"publishers/{publisher}/models/{model}:streamGenerateContent"
+        headers = {"Content-Type": "application/json"}
+        if self._api_key.startswith("ya29."):
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        else:
+            headers["x-goog-api-key"] = self._api_key
+
         request = self._client.build_request(
             "POST",
             path,
             json=body,
             params={"alt": "sse"},
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": self._api_key,
-            },
+            headers=headers,
         )
         return await self._client.send(request, stream=True)
 

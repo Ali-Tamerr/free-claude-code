@@ -286,6 +286,69 @@ async def test_vertex_ai_provider_request_parameters_and_headers() -> None:
 
 
 @pytest.mark.anyio
+async def test_vertex_ai_provider_request_headers_with_oauth_token() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="ya29.test_oauth_token_12345",
+        base_url="https://aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+
+    mock_send = AsyncMock()
+    mock_send.return_value = httpx.Response(200, json={})
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    with patch.object(provider._client, "send", mock_send):
+        try:
+            async for _ in provider.stream_response(DummyRequest()):
+                pass
+        except Exception:
+            pass
+
+    assert mock_send.called
+    called_request = mock_send.call_args[0][0]
+
+    # Check headers: should contain Authorization and NOT contain x-goog-api-key
+    assert (
+        called_request.headers.get("Authorization")
+        == "Bearer ya29.test_oauth_token_12345"
+    )
+    assert "x-goog-api-key" not in called_request.headers
+
+    await provider.cleanup()
+
+
+@pytest.mark.anyio
 async def test_vertex_ai_provider_project_id_path() -> None:
     from unittest.mock import AsyncMock, patch
 

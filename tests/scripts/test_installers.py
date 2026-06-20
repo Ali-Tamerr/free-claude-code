@@ -1,4 +1,8 @@
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 def _repo_root() -> Path:
@@ -30,7 +34,7 @@ def test_install_sh_installs_claude_only_when_missing() -> None:
     body = _braced_body(text, "install_claude_if_missing()")
     main = text[text.index('parse_args "$@"') :]
 
-    assert "Installs Claude Code if missing" in text
+    assert "Installs Claude Code and Codex if missing" in text
     assert "if command -v claude >/dev/null 2>&1; then" in body
     assert "Claude Code already found on PATH; skipping install." in body
     assert "require_command npm" in body
@@ -39,6 +43,23 @@ def test_install_sh_installs_claude_only_when_missing() -> None:
     assert body.index("return 0") < body.index("run npm install")
     assert 'step "Installing Claude Code if missing"\ninstall_claude_if_missing' in main
     assert "npm install -g @anthropic-ai/claude-code" not in main
+
+
+def test_install_sh_installs_codex_only_when_missing() -> None:
+    text = _script_text("install.sh")
+    body = _braced_body(text, "install_codex_if_missing()")
+    main = text[text.index('parse_args "$@"') :]
+
+    assert "if command -v codex >/dev/null 2>&1; then" in body
+    assert "Codex already found on PATH; skipping install." in body
+    assert "require_command npm" in body
+    assert "run npm install -g @openai/codex" in body
+    assert body.index("command -v codex") < body.index("run npm install")
+    assert body.index("return 0") < body.index("run npm install")
+    assert 'step "Installing Codex if missing"\ninstall_codex_if_missing' in main
+    assert "npm install -g @openai/codex" not in main
+    assert "fcc-claude" in text
+    assert "fcc-codex" in text
 
 
 def test_install_sh_installs_missing_uv_without_self_update() -> None:
@@ -93,7 +114,7 @@ def test_install_ps1_installs_claude_only_when_missing() -> None:
     text = _script_text("install.ps1")
     body = _braced_body(text, "function Install-ClaudeIfMissing")
 
-    assert "Installs Claude Code if missing" in text
+    assert "Installs Claude Code and Codex if missing" in text
     assert "if (Get-Command claude -ErrorAction SilentlyContinue)" in body
     assert "Claude Code already found on PATH; skipping install." in body
     assert 'Assert-CommandAvailable "npm"' in body
@@ -107,6 +128,24 @@ def test_install_ps1_installs_claude_only_when_missing() -> None:
         'Write-Step "Installing Claude Code if missing"\nInstall-ClaudeIfMissing'
         in text
     )
+
+
+def test_install_ps1_installs_codex_only_when_missing() -> None:
+    text = _script_text("install.ps1")
+    body = _braced_body(text, "function Install-CodexIfMissing")
+
+    assert "if (Get-Command codex -ErrorAction SilentlyContinue)" in body
+    assert "Codex already found on PATH; skipping install." in body
+    assert 'Assert-CommandAvailable "npm"' in body
+    assert (
+        'Invoke-InstallCommand -FilePath "npm" '
+        '-Arguments @("install", "-g", "@openai/codex")'
+    ) in body
+    assert body.index("Get-Command codex") < body.index("Invoke-InstallCommand")
+    assert body.index("return") < body.index("Invoke-InstallCommand")
+    assert 'Write-Step "Installing Codex if missing"\nInstall-CodexIfMissing' in text
+    assert "fcc-claude" in text
+    assert "fcc-codex" in text
 
 
 def test_install_ps1_installs_missing_uv_without_self_update() -> None:
@@ -161,8 +200,92 @@ def test_install_ps1_updates_uv_with_detected_source() -> None:
 def test_install_ps1_validates_minimum_uv_version() -> None:
     text = _script_text("install.ps1")
     validate_body = _braced_body(text, "function Assert-MinUvVersion")
+    get_version_body = _braced_body(text, "function Get-InstalledUvVersion")
 
     assert '$MinUvVersion = "0.11.0"' in text
     assert '"self", "version", "--short"' in text
+    assert "Convert-UvVersionOutput $selfVersionProbe.Output" in get_version_body
+    assert "Convert-UvVersionOutput $versionProbe.Output" in get_version_body
+    assert ".Output.Trim()" not in get_version_body
     assert "[version]" in text
     assert "uv $MinUvVersion or newer is required" in validate_body
+
+
+def test_install_ps1_parses_uv_version_probe_outputs(tmp_path: Path) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    text = _script_text("install.ps1")
+    convert_body = _braced_body(text, "function Convert-UvVersionOutput")
+    get_version_body = _braced_body(text, "function Get-InstalledUvVersion")
+    compare_body = _braced_body(text, "function Test-UvVersionAtLeast")
+    script = f"""
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+function Convert-UvVersionOutput {{
+{convert_body}
+}}
+function Get-InstalledUvVersion {{
+{get_version_body}
+}}
+function Test-UvVersionAtLeast {{
+{compare_body}
+}}
+
+$script:Mode = "self-long"
+function Invoke-ProbeCommand {{
+    param(
+        [string] $FilePath,
+        [string[]] $Arguments = @()
+    )
+
+    $joined = $Arguments -join " "
+    if ($script:Mode -eq "self-long" -and $joined -eq "self version --short") {{
+        return [pscustomobject] @{{ ExitCode = 0; Output = "0.11.7 (9d177269e 2026-06-05 x86_64-pc-windows-msvc)" }}
+    }}
+    if ($script:Mode -eq "fallback-long" -and $joined -eq "self version --short") {{
+        return [pscustomobject] @{{ ExitCode = 1; Output = "" }}
+    }}
+    if ($script:Mode -eq "fallback-long" -and $joined -eq "--version") {{
+        return [pscustomobject] @{{ ExitCode = 0; Output = "uv 0.11.7 (9d177269e 2026-06-05 x86_64-pc-windows-msvc)" }}
+    }}
+    if ($script:Mode -eq "bad") {{
+        return [pscustomobject] @{{ ExitCode = 0; Output = "not a uv version" }}
+    }}
+    throw "Unexpected probe: $joined"
+}}
+
+if ((Convert-UvVersionOutput "0.11.7") -ne "0.11.7") {{ throw "clean version parse failed" }}
+if ((Convert-UvVersionOutput "uv 0.11.7 (9d177269e 2026)") -ne "0.11.7") {{ throw "uv --version parse failed" }}
+if ((Convert-UvVersionOutput "0.11.7 (9d177269e 2026)") -ne "0.11.7") {{ throw "self version parse failed" }}
+if ((Convert-UvVersionOutput "not a uv version") -ne "") {{ throw "bad output should not parse" }}
+
+$script:Mode = "self-long"
+if ((Get-InstalledUvVersion) -ne "0.11.7") {{ throw "self version normalization failed" }}
+$script:Mode = "fallback-long"
+if ((Get-InstalledUvVersion) -ne "0.11.7") {{ throw "fallback version normalization failed" }}
+if (-not (Test-UvVersionAtLeast -Version "0.11.7 (9d177269e 2026)" -Minimum "0.11.0")) {{ throw "version comparison failed" }}
+
+$script:Mode = "bad"
+try {{
+    Get-InstalledUvVersion | Out-Null
+    throw "bad version did not fail"
+}}
+catch {{
+    if ($_.Exception.Message -ne "Unable to determine uv version.") {{
+        throw
+    }}
+}}
+"""
+    script_path = tmp_path / "test-install-uv-version.ps1"
+    script_path.write_text(script, encoding="utf-8")
+
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-File", str(script_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr

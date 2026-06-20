@@ -32,23 +32,11 @@ _VERTEX_MODEL_FALLBACK: frozenset[str] = frozenset(
     (
         "google/gemini-3.5-flash",
         "google/gemini-3.1-flash-lite",
-        "google/gemini-live-2.5-flash-native-audio",
         "google/gemini-2.5-pro",
         "google/gemini-2.5-flash",
         "google/gemini-2.5-flash-lite",
-        "google/gemini-2.5-flash-image",
         "google/gemini-2.0-flash-001",
         "google/gemini-2.0-flash-lite-001",
-        "google/veo-3.1-generate-001",
-        "google/veo-3.1-fast-generate-001",
-        "google/veo-3.0-generate-001",
-        "google/veo-3.0-fast-generate-001",
-        "google/veo-2.0-generate-001",
-        "google/gemini-embedding-001",
-        "google/text-embedding-005",
-        "google/text-embedding-004",
-        "google/text-multilingual-embedding-002",
-        "google/multimodalembedding@001",
     )
 )
 

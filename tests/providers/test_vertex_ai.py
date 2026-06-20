@@ -349,3 +349,40 @@ async def test_vertex_ai_provider_project_id_path() -> None:
     )
 
     await provider.cleanup()
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_provider_list_models() -> None:
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+
+    model_ids = await provider.list_model_ids()
+    assert "google/gemini-3.5-flash" in model_ids
+    assert "google/gemini-2.5-pro" in model_ids
+
+    # Verify non-chat, embedding, and video models are NOT in the list
+    assert "google/gemini-embedding-001" not in model_ids
+    assert "google/text-embedding-005" not in model_ids
+    assert "google/veo-3.1-generate-001" not in model_ids
+    assert "google/gemini-live-2.5-flash-native-audio" not in model_ids
+    assert "google/gemini-2.5-flash-image" not in model_ids
+
+    model_infos = await provider.list_model_infos()
+    assert len(model_infos) == len(model_ids)
+    info_ids = {info.model_id for info in model_infos}
+    assert info_ids == model_ids
+
+    await provider.cleanup()

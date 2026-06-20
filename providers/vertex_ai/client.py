@@ -11,7 +11,7 @@ import httpx
 
 from core.anthropic import ContentType, HeuristicToolParser, SSEBuilder, ThinkTagParser
 from core.anthropic.sse import map_stop_reason
-from core.trace import trace_event
+from core.trace import provider_vertex_body_snapshot, trace_event
 from providers.base import BaseProvider, ProviderConfig
 from providers.error_mapping import (
     attach_provider_error_body,
@@ -202,7 +202,7 @@ class VertexAIProvider(BaseProvider):
             downstream_model=_strip_provider_prefix(request.model),
             message_count=len(body.get("contents", [])),
             tool_count=len(body.get("tools", [])),
-            body=body,
+            body=provider_vertex_body_snapshot(body),
         )
 
         yield sse.message_start()

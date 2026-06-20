@@ -495,3 +495,74 @@ async def test_vertex_ai_raw_stream_logging_gate(caplog) -> None:
 
     await provider.cleanup()
     await provider_enabled.cleanup()
+
+
+@pytest.mark.anyio
+async def test_vertex_ai_provider_request_sent_trace_body_snapshot() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from providers.base import ProviderConfig
+    from providers.vertex_ai import VertexAIProvider
+
+    config = ProviderConfig(
+        api_key="test_api_key_12345",
+        base_url="https://us-central1-aiplatform.googleapis.com/v1",
+        rate_limit=1,
+        rate_window=1,
+        max_concurrency=1,
+        http_read_timeout=10,
+        http_write_timeout=10,
+        http_connect_timeout=10,
+        enable_thinking=False,
+    )
+    provider = VertexAIProvider(config, location="us-central1")
+    mock_send = AsyncMock()
+    mock_send.return_value = httpx.Response(200, json={})
+
+    class DummyRequest:
+        model = "vertex_ai/google/gemini-3.5-flash"
+        system = ""
+        max_tokens = 100
+        stream = True
+        extra_headers = None
+        extra_query = None
+        extra_body = None
+        stop = None
+        temperature = None
+        top_p = None
+        top_k = None
+        tools = None
+        tool_choice = None
+
+        def __init__(self) -> None:
+            self.messages: list = []
+
+    with (
+        patch("providers.vertex_ai.client.trace_event") as mock_trace_event,
+        patch.object(provider._client, "send", mock_send),
+    ):
+        try:
+            async for _ in provider.stream_response(DummyRequest()):
+                pass
+        except Exception:
+            pass
+
+    # Check trace_event calls
+    assert mock_trace_event.called
+    # Find the call for provider.request.sent
+    sent_call = None
+    for call in mock_trace_event.call_args_list:
+        kwargs = call.kwargs
+        if kwargs.get("event") == "provider.request.sent":
+            sent_call = kwargs
+            break
+
+    assert sent_call is not None
+    body_snap = sent_call["body"]
+    # Check that it is a snapshot containing only allowed keys
+    assert "contents" in body_snap
+    assert "generationConfig" in body_snap
+
+    await provider.cleanup()

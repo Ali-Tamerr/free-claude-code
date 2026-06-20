@@ -146,14 +146,14 @@ class TestCLIParser:
 # --- CLI Session Tests ---
 
 
-class TestCLISession:
-    """Test CLISession."""
+class TestManagedClaudeSession:
+    """Test ManagedClaudeSession."""
 
     def test_session_init(self):
-        """Test CLISession initialization."""
-        from cli.session import CLISession
+        """Test ManagedClaudeSession initialization."""
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession(
+        session = ManagedClaudeSession(
             workspace_path="/tmp/test",
             api_url="http://localhost:8082/v1",
             allowed_dirs=["/home/user/projects"],
@@ -164,42 +164,40 @@ class TestCLISession:
 
     def test_session_extract_session_id(self):
         """Test session ID extraction from various event formats."""
-        from cli.session import CLISession
-
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        from cli.managed.claude import extract_managed_claude_session_id
 
         # Direct session_id field
-        assert session._extract_session_id({"session_id": "abc123"}) == "abc123"
-        assert session._extract_session_id({"sessionId": "abc123"}) == "abc123"
+        assert extract_managed_claude_session_id({"session_id": "abc123"}) == "abc123"
+        assert extract_managed_claude_session_id({"sessionId": "abc123"}) == "abc123"
 
         # Nested in init
         assert (
-            session._extract_session_id({"init": {"session_id": "nested123"}})
+            extract_managed_claude_session_id({"init": {"session_id": "nested123"}})
             == "nested123"
         )
 
         # Nested in result
         assert (
-            session._extract_session_id({"result": {"session_id": "res123"}})
+            extract_managed_claude_session_id({"result": {"session_id": "res123"}})
             == "res123"
         )
 
         # Conversation id
         assert (
-            session._extract_session_id({"conversation": {"id": "conv123"}})
+            extract_managed_claude_session_id({"conversation": {"id": "conv123"}})
             == "conv123"
         )
 
         # No session ID
-        assert session._extract_session_id({"type": "message"}) is None
-        assert session._extract_session_id("not a dict") is None
+        assert extract_managed_claude_session_id({"type": "message"}) is None
+        assert extract_managed_claude_session_id("not a dict") is None
 
     @pytest.mark.asyncio
     async def test_start_task_basic_flow(self):
         """Test start_task running a basic command flow."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         # Mock subprocess
         mock_process = AsyncMock()
@@ -241,9 +239,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_with_session_resume(self):
         """Test resuming an existing session."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [
@@ -268,9 +266,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_with_session_resume_and_fork(self):
         """Test resuming an existing session and forking."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [b""]  # Immediate EOF
@@ -295,9 +293,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_process_failure_with_stderr(self):
         """Test process exit with error code and stderr output."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [b""]  # No stdout
@@ -323,9 +321,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_stderr_while_stdout_streams(self):
         """Stderr is drained concurrently so stdout streaming is not blocked."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [
@@ -352,7 +350,7 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_drain_stderr_bounded_retains_cap_but_drains_to_eof(self):
         """Oversized stderr is fully drained so the pipe cannot deadlock; capture is bounded."""
-        from cli.session import _MAX_STDERR_CAPTURE_BYTES, CLISession
+        from cli.managed.session import _MAX_STDERR_CAPTURE_BYTES, ManagedClaudeSession
 
         total_len = _MAX_STDERR_CAPTURE_BYTES + 100_000
         remaining: dict[str, int] = {"n": total_len}
@@ -369,7 +367,7 @@ class TestCLISession:
         class _FakeProcess:
             stderr = _FakeStderr()
 
-        out = await CLISession._drain_stderr_bounded(
+        out = await ManagedClaudeSession._drain_stderr_bounded(
             cast(asyncio.subprocess.Process, _FakeProcess())
         )
         assert len(out) == _MAX_STDERR_CAPTURE_BYTES
@@ -379,9 +377,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_stop_session(self):
         """Test stopping the session process."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = MagicMock()
         mock_process.returncode = None  # Running
@@ -390,7 +388,7 @@ class TestCLISession:
 
         session.process = mock_process
 
-        with patch("cli.session.kill_pid_tree_best_effort") as kill_tree:
+        with patch("cli.managed.session.kill_pid_tree_best_effort") as kill_tree:
             stopped = await session.stop()
 
         assert stopped is True
@@ -400,9 +398,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_stop_session_timeout_force_kill(self):
         """Test force kill if terminate times out."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = MagicMock()
         mock_process.returncode = None
@@ -418,7 +416,7 @@ class TestCLISession:
 
         session.process = mock_process
 
-        with patch("cli.session.kill_pid_tree_best_effort") as kill_tree:
+        with patch("cli.managed.session.kill_pid_tree_best_effort") as kill_tree:
             stopped = await session.stop()
 
         assert stopped is True
@@ -428,9 +426,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_split_buffer(self):
         """Test handling of JSON split across chunks."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         # Split json: {"type": "mess... age"}
@@ -457,9 +455,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_remnant_buffer(self):
         """Test handling of buffer remnant at EOF (no newline at end)."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [
@@ -484,10 +482,10 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_non_v1_url(self):
         """Test start_task with a non-v1 URL."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
         # URL not ending in /v1
-        session = CLISession("/tmp", "http://localhost:8082")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [b""]
@@ -509,9 +507,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_sets_proxy_auth_token(self):
         """Test start_task forwards configured proxy auth to Claude Code."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession(
+        session = ManagedClaudeSession(
             "/tmp", "http://localhost:8082/v1", auth_token="proxy-token"
         )
 
@@ -537,11 +535,13 @@ class TestCLISession:
             assert "ANTHROPIC_API_KEY" not in env
 
     @pytest.mark.asyncio
-    async def test_start_task_removes_stale_auth_token_when_proxy_auth_blank(self):
+    async def test_start_task_uses_sentinel_when_proxy_auth_blank(self):
         """Test start_task does not leak inherited Claude auth into proxy calls."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1", auth_token="")
+        session = ManagedClaudeSession(
+            "/tmp", "http://localhost:8082/v1", auth_token=""
+        )
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [b""]
@@ -559,14 +559,14 @@ class TestCLISession:
                 pass
 
             env = mock_exec.call_args.kwargs["env"]
-            assert "ANTHROPIC_AUTH_TOKEN" not in env
+            assert env["ANTHROPIC_AUTH_TOKEN"] == "fcc-no-auth"
 
     @pytest.mark.asyncio
     async def test_start_task_allowed_dirs(self):
         """Test start_task includes allowed dirs in command."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession(
+        session = ManagedClaudeSession(
             "/tmp", "http://localhost:8082/v1", allowed_dirs=["/dir1", "/dir2"]
         )
 
@@ -590,9 +590,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_plans_directory(self):
         """Test start_task includes --settings plansDirectory when plans_directory set."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession(
+        session = ManagedClaudeSession(
             "/tmp",
             "http://localhost:8082/v1",
             plans_directory="./agent_workspace/plans",
@@ -620,9 +620,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_start_task_json_error(self):
         """Test handling of non-JSON output from CLI."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = AsyncMock()
         mock_process.stdout.read.side_effect = [b"Not valid json\n", b""]
@@ -642,9 +642,9 @@ class TestCLISession:
     @pytest.mark.asyncio
     async def test_stop_exception(self):
         """Test exception handling during stop."""
-        from cli.session import CLISession
+        from cli.managed.session import ManagedClaudeSession
 
-        session = CLISession("/tmp", "http://localhost:8082/v1")
+        session = ManagedClaudeSession("/tmp", "http://localhost:8082/v1")
 
         mock_process = MagicMock()
         mock_process.returncode = None
@@ -652,22 +652,22 @@ class TestCLISession:
         session.process = mock_process
 
         with patch(
-            "cli.session.kill_pid_tree_best_effort",
+            "cli.managed.session.kill_pid_tree_best_effort",
             side_effect=RuntimeError("Permission denied"),
         ):
             stopped = await session.stop()
         assert stopped is False
 
 
-class TestCLISessionManager:
-    """Test CLISessionManager."""
+class TestManagedClaudeSessionManager:
+    """Test ManagedClaudeSessionManager."""
 
     @pytest.mark.asyncio
     async def test_manager_create_session(self):
         """Test creating a new session."""
-        from cli.manager import CLISessionManager
+        from cli.managed.manager import ManagedClaudeSessionManager
 
-        manager = CLISessionManager(
+        manager = ManagedClaudeSessionManager(
             workspace_path="/tmp/test",
             api_url="http://localhost:8082/v1",
         )
@@ -680,9 +680,9 @@ class TestCLISessionManager:
     @pytest.mark.asyncio
     async def test_manager_reuse_session(self):
         """Test reusing an existing session."""
-        from cli.manager import CLISessionManager
+        from cli.managed.manager import ManagedClaudeSessionManager
 
-        manager = CLISessionManager(
+        manager = ManagedClaudeSessionManager(
             workspace_path="/tmp/test",
             api_url="http://localhost:8082/v1",
         )
@@ -699,9 +699,9 @@ class TestCLISessionManager:
     @pytest.mark.asyncio
     async def test_manager_stats(self):
         """Test manager stats."""
-        from cli.manager import CLISessionManager
+        from cli.managed.manager import ManagedClaudeSessionManager
 
-        manager = CLISessionManager(
+        manager = ManagedClaudeSessionManager(
             workspace_path="/tmp/test",
             api_url="http://localhost:8082/v1",
         )

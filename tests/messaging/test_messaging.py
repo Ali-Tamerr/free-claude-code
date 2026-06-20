@@ -1,7 +1,7 @@
 """Tests for messaging/ module."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -43,15 +43,32 @@ class TestMessagingModels:
         assert msg.reply_to_message_id == "100"
 
 
-class TestMessagingBase:
-    """Test MessagingPlatform ABC."""
+class TestMessagingPorts:
+    """Test explicit messaging platform component ports."""
 
-    def test_platform_is_abstract(self):
-        """Verify MessagingPlatform cannot be instantiated."""
-        from messaging.platforms.base import MessagingPlatform
+    def test_components_bundle_runtime_and_outbound(self):
+        """Verify the factory handoff shape is explicit."""
+        from messaging.platforms.ports import MessagingPlatformComponents
 
-        with pytest.raises(TypeError):
-            MessagingPlatform()
+        runtime = MagicMock()
+        runtime.name = "telegram"
+        runtime.start = AsyncMock()
+        runtime.stop = AsyncMock()
+        runtime.on_message = MagicMock()
+        outbound = MagicMock()
+        outbound.queue_send_message = AsyncMock()
+        outbound.queue_edit_message = AsyncMock()
+        outbound.queue_delete_message = AsyncMock()
+        outbound.queue_delete_messages = AsyncMock()
+        outbound.fire_and_forget = MagicMock()
+        components = MessagingPlatformComponents(
+            name="telegram",
+            runtime=runtime,
+            outbound=outbound,
+            voice_cancellation=None,
+        )
+        assert components.runtime is runtime
+        assert components.outbound is outbound
 
 
 class TestSessionStore:
@@ -146,21 +163,21 @@ class TestTreeQueueManager:
 
     def test_tree_queue_manager_init(self):
         """Test TreeQueueManager initialization."""
-        from messaging.trees.queue_manager import TreeQueueManager
+        from messaging.trees import TreeQueueManager
 
         mgr = TreeQueueManager()
         assert mgr.get_tree_count() == 0
 
     def test_tree_not_busy_initially(self):
         """Test tree is not busy when no messages."""
-        from messaging.trees.queue_manager import TreeQueueManager
+        from messaging.trees import TreeQueueManager
 
         mgr = TreeQueueManager()
         assert mgr.is_tree_busy("nonexistent") is False
 
     def test_get_queue_size_empty(self):
         """Test queue size is 0 for non-existent node."""
-        from messaging.trees.queue_manager import TreeQueueManager
+        from messaging.trees import TreeQueueManager
 
         mgr = TreeQueueManager()
         assert mgr.get_queue_size("nonexistent") == 0
@@ -169,7 +186,7 @@ class TestTreeQueueManager:
     async def test_create_tree_and_enqueue(self):
         """Test creating a tree and enqueueing."""
         from messaging.models import IncomingMessage
-        from messaging.trees.queue_manager import TreeQueueManager
+        from messaging.trees import TreeQueueManager
 
         mgr = TreeQueueManager()
         processed = []
@@ -190,7 +207,7 @@ class TestTreeQueueManager:
     @pytest.mark.asyncio
     async def test_cancel_tree_empty(self):
         """Test cancelling non-existent tree."""
-        from messaging.trees.queue_manager import TreeQueueManager
+        from messaging.trees import TreeQueueManager
 
         mgr = TreeQueueManager()
         cancelled = await mgr.cancel_tree("nonexistent")

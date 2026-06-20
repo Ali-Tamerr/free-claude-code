@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from config.settings import Settings
-from messaging.platforms.factory import create_messaging_platform
+from messaging.platforms.factory import create_messaging_components
 from providers.registry import PROVIDER_DESCRIPTORS, build_provider_config
 from smoke.lib.child_process import cmd_free_claude_code_serve, cmd_python_c
 from smoke.lib.config import SmokeConfig
@@ -60,8 +60,7 @@ def test_removed_env_migration_e2e(smoke_config: SmokeConfig, tmp_path) -> None:
         timeout=smoke_config.timeout_s,
         check=False,
     )
-    assert result.returncode != 0
-    assert "NIM_ENABLE_THINKING has been removed" in (result.stderr + result.stdout)
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.smoke_target("config")
@@ -162,9 +161,9 @@ def _settings_init_key(field_name: str) -> str:
 
 @pytest.mark.smoke_target("extensibility")
 def test_platform_factory_e2e() -> None:
-    assert create_messaging_platform("not-a-platform") is None
-    assert create_messaging_platform("telegram") is None
-    assert create_messaging_platform("discord") is None
+    assert create_messaging_components("not-a-platform") is None
+    assert create_messaging_components("telegram") is None
+    assert create_messaging_components("discord") is None
 
 
 @pytest.mark.smoke_target("cli")

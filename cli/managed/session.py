@@ -1,36 +1,28 @@
-"""Claude Code CLI session management."""
+"""Managed Claude Code subprocess session."""
 
 import asyncio
-import json
 import os
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
-from typing import Any
 
 from loguru import logger
 
+from cli.process_registry import kill_pid_tree_best_effort, register_pid, unregister_pid
 from core.trace import trace_event
 
-from .process_registry import kill_pid_tree_best_effort, register_pid, unregister_pid
+from .claude import (
+    ManagedClaudeConfig,
+    ManagedClaudeParseState,
+    ManagedClaudeTaskRequest,
+    build_managed_claude_invocation,
+    parse_managed_claude_stdout_line,
+)
 
 # Cap stderr capture so a runaway child cannot exhaust memory; pipe is still drained.
 _MAX_STDERR_CAPTURE_BYTES = 256 * 1024
 
 
-@dataclass(frozen=True, slots=True)
-class ClaudeCliConfig:
-    """Configuration for a managed Claude CLI subprocess."""
-
-    workspace_path: str
-    api_url: str
-    allowed_dirs: list[str] = field(default_factory=list)
-    plans_directory: str | None = None
-    claude_bin: str = "claude"
-    auth_token: str = ""
-
-
-class CLISession:
-    """Manages a single persistent Claude Code CLI subprocess."""
+class ManagedClaudeSession:
+    """Manages a single persistent Claude Code subprocess."""
 
     def __init__(
         self,
@@ -43,7 +35,7 @@ class CLISession:
         *,
         log_raw_cli_diagnostics: bool = False,
     ):
-        self.config = ClaudeCliConfig(
+        self.config = ManagedClaudeConfig(
             workspace_path=os.path.normpath(os.path.abspath(workspace_path)),
             api_url=api_url,
             allowed_dirs=[os.path.normpath(d) for d in (allowed_dirs or [])],
@@ -111,83 +103,30 @@ class CLISession:
         """
         async with self._cli_lock:
             self._is_busy = True
-            env = os.environ.copy()
-
-            env["ANTHROPIC_API_URL"] = self.api_url
-            if self.api_url.endswith("/v1"):
-                env["ANTHROPIC_BASE_URL"] = self.api_url[:-3]
-            else:
-                env["ANTHROPIC_BASE_URL"] = self.api_url
-            env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] = "1"
-            env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = "190000"
-            env.pop("ANTHROPIC_API_KEY", None)
-            if token := self.auth_token.strip():
-                env["ANTHROPIC_AUTH_TOKEN"] = token
-            else:
-                env.pop("ANTHROPIC_AUTH_TOKEN", None)
-
-            env["TERM"] = "dumb"
-            env["PYTHONIOENCODING"] = "utf-8"
-
-            # Build command
-            if session_id and not session_id.startswith("pending_"):
-                cmd = [
-                    self.claude_bin,
-                    "--resume",
-                    session_id,
-                ]
-                if fork_session:
-                    cmd.append("--fork-session")
-                cmd += [
-                    "-p",
-                    prompt,
-                    "--output-format",
-                    "stream-json",
-                    "--dangerously-skip-permissions",
-                    "--verbose",
-                ]
-            else:
-                cmd = [
-                    self.claude_bin,
-                    "-p",
-                    prompt,
-                    "--output-format",
-                    "stream-json",
-                    "--dangerously-skip-permissions",
-                    "--verbose",
-                ]
-
-            if self.allowed_dirs:
-                for d in self.allowed_dirs:
-                    cmd.extend(["--add-dir", d])
-
-            if self.plans_directory is not None:
-                settings_json = json.dumps({"plansDirectory": self.plans_directory})
-                cmd.extend(["--settings", settings_json])
+            invocation = build_managed_claude_invocation(
+                config=self.config,
+                request=ManagedClaudeTaskRequest(
+                    prompt=prompt,
+                    session_id=session_id,
+                    fork_session=fork_session,
+                ),
+                base_env=os.environ,
+            )
 
             trace_event(
                 stage="claude_cli",
                 event="claude_cli.process.launch",
                 source="claude_cli",
-                resume_session_id=(
-                    session_id
-                    if session_id and not session_id.startswith("pending_")
-                    else None
-                ),
-                fork_session=fork_session,
-                prompt=prompt,
-                cwd=self.workspace,
-                claude_binary=self.claude_bin,
-                cli_argv=cmd,
+                **invocation.trace_metadata,
             )
 
             try:
                 self.process = await asyncio.create_subprocess_exec(
-                    *cmd,
+                    *invocation.argv,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.workspace,
-                    env=env,
+                    cwd=invocation.cwd,
+                    env=invocation.env,
                 )
                 if self.process and self.process.pid:
                     register_pid(self.process.pid)
@@ -196,7 +135,9 @@ class CLISession:
                     yield {"type": "exit", "code": 1}
                     return
 
-                session_id_extracted = False
+                parse_state = ManagedClaudeParseState(
+                    log_raw_cli_diagnostics=self._log_raw_cli_diagnostics
+                )
                 buffer = bytearray()
                 stderr_task: asyncio.Task[bytes] | None = None
                 if self.process.stderr:
@@ -214,10 +155,8 @@ class CLISession:
                                 ).strip()
                                 if line_str:
                                     async for event in self._handle_line_gen(
-                                        line_str, session_id_extracted
+                                        line_str, parse_state
                                     ):
-                                        if event.get("type") == "session_info":
-                                            session_id_extracted = True
                                         yield event
                             break
 
@@ -234,10 +173,8 @@ class CLISession:
                             line_str = line.decode("utf-8", errors="replace").strip()
                             if line_str:
                                 async for event in self._handle_line_gen(
-                                    line_str, session_id_extracted
+                                    line_str, parse_state
                                 ):
-                                    if event.get("type") == "session_info":
-                                        session_id_extracted = True
                                     yield event
                 except asyncio.CancelledError:
                     # Cancelling the handler task should not leave a Claude CLI
@@ -283,50 +220,15 @@ class CLISession:
                     unregister_pid(self.process.pid)
 
     async def _handle_line_gen(
-        self, line_str: str, session_id_extracted: bool
+        self, line_str: str, parse_state: ManagedClaudeParseState
     ) -> AsyncGenerator[dict]:
         """Process a single line and yield events."""
-        try:
-            event = json.loads(line_str)
-            if not session_id_extracted:
-                extracted_id = self._extract_session_id(event)
-                if extracted_id:
-                    self.current_session_id = extracted_id
-                    logger.info(f"Extracted session ID: {extracted_id}")
-                    yield {"type": "session_info", "session_id": extracted_id}
-
+        for event in parse_managed_claude_stdout_line(line_str, parse_state):
+            if isinstance(event, dict) and event.get("type") == "session_info":
+                session_id = event.get("session_id")
+                if isinstance(session_id, str):
+                    self.current_session_id = session_id
             yield event
-        except json.JSONDecodeError:
-            if self._log_raw_cli_diagnostics:
-                logger.debug("Non-JSON output: {}", line_str)
-            else:
-                logger.debug("Non-JSON CLI line: char_len={}", len(line_str))
-            yield {"type": "raw", "content": line_str}
-
-    def _extract_session_id(self, event: Any) -> str | None:
-        """Extract session ID from CLI event."""
-        if not isinstance(event, dict):
-            return None
-
-        if "session_id" in event:
-            return event["session_id"]
-        if "sessionId" in event:
-            return event["sessionId"]
-
-        for key in ["init", "system", "result", "metadata"]:
-            if key in event and isinstance(event[key], dict):
-                nested = event[key]
-                if "session_id" in nested:
-                    return nested["session_id"]
-                if "sessionId" in nested:
-                    return nested["sessionId"]
-
-        if "conversation" in event and isinstance(event["conversation"], dict):
-            conv = event["conversation"]
-            if "id" in conv:
-                return conv["id"]
-
-        return None
 
     async def stop(self):
         """Stop the CLI process."""

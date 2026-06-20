@@ -21,7 +21,7 @@ function Show-Usage {
     @"
 Usage: install.ps1 [options]
 
-Installs Claude Code if missing, installs or updates uv, Python 3.14.0, and Free Claude Code.
+Installs Claude Code and Codex if missing, installs or updates uv, Python 3.14.0, and Free Claude Code.
 
 Options:
   -VoiceNim              Install NVIDIA NIM voice transcription support.
@@ -131,18 +131,32 @@ function Invoke-ProbeCommand {
     }
 }
 
+function Convert-UvVersionOutput {
+    param([string] $Output)
+
+    if ([string]::IsNullOrWhiteSpace($Output)) {
+        return ""
+    }
+
+    if ($Output -match '(?m)(?:^|\s)(?:uv\s+)?(?<version>\d+\.\d+\.\d+(?:[-+][0-9A-Za-z][0-9A-Za-z.-]*)?)\b') {
+        return $Matches["version"]
+    }
+
+    return ""
+}
+
 function Get-InstalledUvVersion {
     $version = ""
 
     $selfVersionProbe = Invoke-ProbeCommand -FilePath "uv" -Arguments @("self", "version", "--short")
     if ($selfVersionProbe.ExitCode -eq 0) {
-        $version = $selfVersionProbe.Output.Trim()
+        $version = Convert-UvVersionOutput $selfVersionProbe.Output
     }
 
     if ([string]::IsNullOrWhiteSpace($version)) {
         $versionProbe = Invoke-ProbeCommand -FilePath "uv" -Arguments @("--version")
-        if (($versionProbe.ExitCode -eq 0) -and ($versionProbe.Output -match '^uv\s+([^\s]+)')) {
-            $version = $Matches[1]
+        if ($versionProbe.ExitCode -eq 0) {
+            $version = Convert-UvVersionOutput $versionProbe.Output
         }
     }
 
@@ -159,8 +173,14 @@ function Test-UvVersionAtLeast {
         [string] $Minimum
     )
 
-    $normalizedVersion = $Version -replace '[-+].*$', ''
-    $normalizedMinimum = $Minimum -replace '[-+].*$', ''
+    $normalizedVersion = Convert-UvVersionOutput $Version
+    $normalizedMinimum = Convert-UvVersionOutput $Minimum
+    if ([string]::IsNullOrWhiteSpace($normalizedVersion) -or [string]::IsNullOrWhiteSpace($normalizedMinimum)) {
+        throw "Unable to compare uv versions."
+    }
+
+    $normalizedVersion = $normalizedVersion -replace '[-+].*$', ''
+    $normalizedMinimum = $normalizedMinimum -replace '[-+].*$', ''
     return ([version] $normalizedVersion) -ge ([version] $normalizedMinimum)
 }
 
@@ -292,6 +312,16 @@ function Install-ClaudeIfMissing {
     Invoke-InstallCommand -FilePath "npm" -Arguments @("install", "-g", "@anthropic-ai/claude-code")
 }
 
+function Install-CodexIfMissing {
+    if (Get-Command codex -ErrorAction SilentlyContinue) {
+        Write-Host "Codex already found on PATH; skipping install."
+        return
+    }
+
+    Assert-CommandAvailable "npm"
+    Invoke-InstallCommand -FilePath "npm" -Arguments @("install", "-g", "@openai/codex")
+}
+
 function Install-OrUpdateUv {
     Add-UvToPath
 
@@ -368,6 +398,9 @@ if ((-not [string]::IsNullOrWhiteSpace($TorchBackend)) -and (-not ($VoiceLocal -
 Write-Step "Installing Claude Code if missing"
 Install-ClaudeIfMissing
 
+Write-Step "Installing Codex if missing"
+Install-CodexIfMissing
+
 Write-Step "Installing uv if missing, updating if present"
 Install-OrUpdateUv
 
@@ -379,3 +412,5 @@ Install-FreeClaudeCode
 
 Write-Host ""
 Write-Host "Free Claude Code is installed. Start the proxy with: fcc-server"
+Write-Host "Run Claude Code with: fcc-claude"
+Write-Host "Run Codex with: fcc-codex"

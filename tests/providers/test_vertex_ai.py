@@ -658,3 +658,12 @@ def test_build_request_body_system_instruction():
     assert "systemInstruction" in body
     assert body["systemInstruction"] == {"parts": [{"text": "Be helpful."}]}
     assert "system_instruction" not in body
+    assert "generationConfig" in body
+    assert "thinkingConfig" not in body["generationConfig"]
+
+    body_with_think = build_request_body(request, thinking_enabled=True)
+    assert "generationConfig" in body_with_think
+    assert "thinkingConfig" in body_with_think["generationConfig"]
+    assert body_with_think["generationConfig"]["thinkingConfig"] == {
+        "thinkingBudget": 2048
+    }

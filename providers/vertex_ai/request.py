@@ -69,8 +69,6 @@ def build_request_body(request_data: Any, *, thinking_enabled: bool) -> dict[str
         else:
             t_config["thinkingBudget"] = 2048
         generation_config["thinkingConfig"] = t_config
-    else:
-        generation_config["thinkingConfig"] = {"thinkingBudget": 0}
 
     if generation_config:
         body["generationConfig"] = generation_config

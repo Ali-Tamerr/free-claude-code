@@ -38,7 +38,7 @@ def build_request_body(request_data: Any, *, thinking_enabled: bool) -> dict[str
 
     body: dict[str, Any] = {"contents": contents}
     if system_text:
-        body["system_instruction"] = {"parts": [{"text": system_text}]}
+        body["systemInstruction"] = {"parts": [{"text": system_text}]}
 
     if openai_body.get("tools"):
         body["tools"] = [

@@ -566,3 +566,32 @@ async def test_vertex_ai_provider_request_sent_trace_body_snapshot() -> None:
     assert "generationConfig" in body_snap
 
     await provider.cleanup()
+
+
+def test_build_request_body_system_instruction():
+    from providers.vertex_ai.request import build_request_body
+
+    class MockMessage:
+        def __init__(self, role, content):
+            self.role = role
+            self.content = content
+
+    class MockRequest:
+        def __init__(self):
+            self.model = "vertex_ai/google/gemini-3.5-flash"
+            self.messages = [MockMessage("user", "Hello")]
+            self.system = "Be helpful."
+            self.max_tokens = 100
+            self.stop = None
+            self.temperature = None
+            self.top_p = None
+            self.top_k = None
+            self.tools = None
+            self.tool_choice = None
+
+    request = MockRequest()
+    body = build_request_body(request, thinking_enabled=False)
+
+    assert "systemInstruction" in body
+    assert body["systemInstruction"] == {"parts": [{"text": "Be helpful."}]}
+    assert "system_instruction" not in body

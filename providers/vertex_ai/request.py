@@ -346,28 +346,27 @@ def _get_cache_file_path() -> Path:
     return cache_dir / "vertex_ai_signatures.json"
 
 
-_IN_MEMORY_CACHE: dict[str, str] | None = None
+_IN_MEMORY_CACHES: dict[Path, dict[str, str]] = {}
 
 
 def _get_cache() -> dict[str, str]:
-    global _IN_MEMORY_CACHE
-    if _IN_MEMORY_CACHE is not None:
-        return _IN_MEMORY_CACHE
-
     path = _get_cache_file_path()
+    if path in _IN_MEMORY_CACHES:
+        return _IN_MEMORY_CACHES[path]
+
     if not path.exists():
-        _IN_MEMORY_CACHE = {}
-        return _IN_MEMORY_CACHE
+        _IN_MEMORY_CACHES[path] = {}
+        return _IN_MEMORY_CACHES[path]
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
-                _IN_MEMORY_CACHE = data
-                return _IN_MEMORY_CACHE
+                _IN_MEMORY_CACHES[path] = data
+                return _IN_MEMORY_CACHES[path]
     except Exception as e:
         logger.warning("Failed to load vertex thought signature cache: {}", e)
-    _IN_MEMORY_CACHE = {}
-    return _IN_MEMORY_CACHE
+    _IN_MEMORY_CACHES[path] = {}
+    return _IN_MEMORY_CACHES[path]
 
 
 _SAVE_LOCK = threading.Lock()

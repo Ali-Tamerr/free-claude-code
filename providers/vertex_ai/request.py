@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import uuid
@@ -407,14 +408,27 @@ def _save_cache_to_disk(cache_copy: dict[str, str]) -> None:
             pass
 
 
-def _save_cache_async(cache_copy: dict[str, str]) -> None:
-    import asyncio
+_PENDING_WRITES: set[asyncio.Future[None]] = set()
 
+
+def _save_cache_async(cache_copy: dict[str, str]) -> asyncio.Future[None] | None:
     try:
         loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, _save_cache_to_disk, cache_copy)
+        fut = loop.run_in_executor(None, _save_cache_to_disk, cache_copy)
+        _PENDING_WRITES.add(fut)
+        fut.add_done_callback(_PENDING_WRITES.discard)
+        return fut
     except RuntimeError:
         _save_cache_to_disk(cache_copy)
+        return None
+
+
+async def flush_thought_signatures() -> None:
+    """Await all pending signature cache disk writes."""
+    if _PENDING_WRITES:
+        pending = list(_PENDING_WRITES)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 def _make_cache_key(name: str, args: dict[str, Any]) -> str:

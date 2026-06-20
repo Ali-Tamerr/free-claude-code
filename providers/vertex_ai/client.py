@@ -98,6 +98,9 @@ class VertexAIProvider(BaseProvider):
         )
 
     async def cleanup(self) -> None:
+        from .request import flush_thought_signatures
+
+        await flush_thought_signatures()
         await self._client.aclose()
 
     async def list_model_ids(self) -> frozenset[str]:

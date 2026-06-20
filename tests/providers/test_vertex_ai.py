@@ -695,3 +695,28 @@ def test_save_thought_signature_concurrent(tmp_path):
             data = json.load(f)
             assert isinstance(data, dict)
             assert len(data) > 0
+
+
+@pytest.mark.anyio
+async def test_flush_thought_signatures(tmp_path) -> None:
+    from unittest.mock import patch
+
+    from providers.vertex_ai.request import (
+        flush_thought_signatures,
+        save_thought_signature,
+    )
+
+    temp_cache_file = tmp_path / "vertex_ai_signatures.json"
+
+    with patch(
+        "providers.vertex_ai.request._get_cache_file_path", return_value=temp_cache_file
+    ):
+        save_thought_signature("test_tool", {"param": 1}, "test_sig_value")
+        await flush_thought_signatures()
+
+        assert temp_cache_file.exists()
+        import json
+
+        with open(temp_cache_file, encoding="utf-8") as f:
+            data = json.load(f)
+            assert data.get('test_tool:{"param": 1}') == "test_sig_value"

@@ -21,8 +21,8 @@ from providers.error_mapping import (
 )
 from providers.exceptions import AuthenticationError
 from providers.model_listing import ProviderModelInfo, model_infos_from_ids
-from providers.openai_compat import _iter_heuristic_tool_use_sse
 from providers.rate_limit import GlobalRateLimiter
+from providers.transports.openai_chat.tool_calls import iter_heuristic_tool_use_sse
 
 from .request import build_request_body, save_thought_signature
 
@@ -126,9 +126,9 @@ class VertexAIProvider(BaseProvider):
         publisher, model = _split_publisher_model(model_ref)
         if self._project_id:
             location = self._location or "us-central1"
-            path = f"/projects/{self._project_id}/locations/{location}/publishers/{publisher}/models/{model}:streamGenerateContent"
+            path = f"projects/{self._project_id}/locations/{location}/publishers/{publisher}/models/{model}:streamGenerateContent"
         else:
-            path = f"/publishers/{publisher}/models/{model}:streamGenerateContent"
+            path = f"publishers/{publisher}/models/{model}:streamGenerateContent"
         request = self._client.build_request(
             "POST",
             path,
@@ -260,7 +260,7 @@ class VertexAIProvider(BaseProvider):
                                                 yield event
                                             yield sse.emit_text_delta(filtered_text)
                                         for tool_use in detected_tools:
-                                            for event in _iter_heuristic_tool_use_sse(
+                                            for event in iter_heuristic_tool_use_sse(
                                                 sse, tool_use
                                             ):
                                                 yield event
@@ -300,7 +300,7 @@ class VertexAIProvider(BaseProvider):
             yield sse.emit_text_delta(remaining.content)
 
         for tool_use in heuristic_parser.flush():
-            for event in _iter_heuristic_tool_use_sse(sse, tool_use):
+            for event in iter_heuristic_tool_use_sse(sse, tool_use):
                 yield event
 
         for event in sse.close_all_blocks():

@@ -270,8 +270,9 @@ FIELDS: tuple[ConfigFieldSpec, ...] = (
         "providers",
         settings_attr="vertex_ai_base_url",
         description=(
-            "OpenAI-compatible Vertex AI endpoint base URL. "
-            "Set this or use Project ID + Location to build it."
+            "Google Cloud Vertex AI native REST API base URL. "
+            "Set this or use Project ID + Location to build it. "
+            "Use the 'gemini' provider for OpenAI-compatible Vertex AI endpoints."
         ),
     ),
     ConfigFieldSpec(
